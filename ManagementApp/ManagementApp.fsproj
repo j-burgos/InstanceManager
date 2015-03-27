@@ -35,6 +35,10 @@
       <Project>{7AB45241-F880-4FCD-AFC9-D8489F540A00}</Project>
       <Name>InstanceManager</Name>
     </ProjectReference>
+    <ProjectReference Include="..\Mono.Options\Mono.Options.csproj">
+      <Project>{222B7F16-DF97-43D7-885B-0EFCCAC79911}</Project>
+      <Name>Mono.Options</Name>
+    </ProjectReference>
   </ItemGroup>
   <ItemGroup>
     <Compile Include="AssemblyInfo.fs" />

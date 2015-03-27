@@ -3,20 +3,24 @@ namespace InstanceManager.Aws
 
 open System
 open System.Collections.Generic
+open System.IO
+
+open FSharp.Data
+open FSharp.Data.JsonExtensions
 
 open Amazon
 open Amazon.EC2.Model
 
 type AwsImage = 
     {   
-        imageId : string
-        imageName : string
+        imageId     : string
+        imageName   : string
     }
 
 type AwsOptions = 
     {
-        images : list<AwsImage>
-        instanceTypes: list<string>
+        images          : list<AwsImage>
+        instanceTypes   : list<string>
     }
 
 type AwsInstance = 
@@ -43,11 +47,14 @@ type AwsVmParams =
     }
 
 type AwsManager() = 
+    
+    let path = Path.Combine [| Environment.GetEnvironmentVariable "HOME"; ".aws" ; "credentials.json" |]
+    do if not (File.Exists path) then failwith ("Expected credentials file at: " + path)
 
-    let awsKeyId        = ""
-    let awsSecretKey    = ""
-
-    let client = AWSClientFactory.CreateAmazonEC2Client(awsKeyId,awsSecretKey,RegionEndpoint.USWest1)
+    let credentials = JsonValue.Load path
+    let awsKeyId = (credentials?awsKey).AsString()
+    let awsSecretKey = (credentials?awsSecret).AsString()
+    let client = AWSClientFactory.CreateAmazonEC2Client(awsKeyId,awsSecretKey, RegionEndpoint.USWest1) 
 
     member this.Options() = 
         let req = DescribeImagesRequest()
@@ -71,9 +78,11 @@ type AwsManager() =
         let instances = seq {
           for reservation in reservations do
               for instance in reservation.Instances do
+                  let nameTag = instance.Tags.Find(fun item -> item.Key = "Name")
+                  let name = if nameTag = null then "" else nameTag.Value
                   yield {
                       id = instance.InstanceId
-                      name = ""//instance.Tags.Find(fun item -> item.Key = "name").Value
+                      name = name
                       imageId = instance.ImageId
                       instanceType = instance.InstanceType.Value
                       architecture = instance.Architecture.Value
@@ -88,33 +97,32 @@ type AwsManager() =
         }
         Seq.toList <| instances
 
-    member this.Create(instanceNumber:int,instance:AwsVmParams) = 
+    member this.Create(instanceNumber,instance) = 
 
         let req = RunInstancesRequest(instance.imageId,instanceNumber,instanceNumber)
         req.InstanceType <- EC2.InstanceType(instance.instanceType)
         req.KeyName <- instance.keyName
         let res = client.RunInstances(req)
-        let ins = Seq.toList <| res.Reservation.Instances
-                    |> List.head
-        {
-            id = ins.InstanceId
-            name = ""
-            imageId = ins.ImageId
-            instanceType = ins.InstanceType.Value
-            architecture = ins.Architecture.Value
-            keyName = ins.KeyName
-            privateDnsName = ins.PrivateDnsName
-            privateIpAddress = ins.PrivateIpAddress
-            publicDnsName = ins.PublicDnsName
-            publicIpAddress = ins.PublicIpAddress
-            launchTime = ins.LaunchTime
-            status = ins.State.Name.Value
-        }
+        let instances = Seq.toList <| res.Reservation.Instances
+        instances |> List.map (fun ins ->
+            {
+                id = ins.InstanceId
+                name = ""
+                imageId = ins.ImageId
+                instanceType = ins.InstanceType.Value
+                architecture = ins.Architecture.Value
+                keyName = ins.KeyName
+                privateDnsName = ins.PrivateDnsName
+                privateIpAddress = ins.PrivateIpAddress
+                publicDnsName = ins.PublicDnsName
+                publicIpAddress = ins.PublicIpAddress
+                launchTime = ins.LaunchTime
+                status = ins.State.Name.Value
+            })
 
-    member this.Delete(instanceId:string) = 
+
+    member this.Delete(instanceId) = 
         let req = TerminateInstancesRequest()
-        let instanceIds = List<string>()
-        [instanceId] |> Seq.iter instanceIds.Add
-        req.InstanceIds <- instanceIds
+        req.InstanceIds <- List<string>([instanceId])
         let res = client.TerminateInstances(req)
         res

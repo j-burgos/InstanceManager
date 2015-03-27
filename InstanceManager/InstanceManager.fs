@@ -17,56 +17,62 @@ type Options =
     | AmazonOptions of AwsOptions
     | SLOptions of SoftlayerOptions
 
+type InstanceParams =
+    | AmazonIns of AwsVmParams
+    | SLIns of VmParams
+
 type Instance =
     | AmazonInstance of AwsInstance
-    | AmazonIns of AwsVmParams
     | SLInstance of SoftlayerInstance
-    | SLIns of VmParams
-    | InstanceError of string
 
 type DeleteResult = 
     | DeleteError of string
     | Success
 
-type InstanceManager(backend) = 
 
-    let manager = 
+module InstanceManagement =
+
+    let getManager(backend) =
         match backend with
-        | Backend.Aws -> 
-            AmazonManager <| AwsManager()
-        | Backend.Softlayer -> 
-            SLManager <| SoftlayerManager()
+            | Backend.Aws -> 
+                AmazonManager <| AwsManager()
+            | Backend.Softlayer -> 
+                SLManager <| SoftlayerManager()
 
-    member this.Options() =
+    let getOptions(manager) =
         match manager with
-        | AmazonManager m -> 
-            AmazonOptions <| m.Options()
-        | SLManager m -> 
-            SLOptions <| m.Options()
-    
-    member this.List() =
+            | AmazonManager m -> 
+                AmazonOptions <| m.Options()
+            | SLManager m -> 
+                SLOptions <| m.Options()
+
+    let getInstances(manager) = 
         match manager with
-        | AmazonManager m -> 
-            m.List() 
-            |> List.map (fun item -> AmazonInstance(item)) 
-        | SLManager m -> 
-            m.List() 
-            |> List.map (fun item -> SLInstance(item))
-    
-    member this.Create(numberOfInstances, instance) =
-        match manager, instance with 
-        | AmazonManager m, AmazonIns ins -> 
-            AmazonInstance <| m.Create(numberOfInstances, ins)
-        | SLManager m, SLIns ins -> 
-            SLInstance <| m.Create(numberOfInstances, ins)
-        | _ -> 
-            InstanceError <| "Not valid"
-    
-    member this.Delete(id) =
+            | AmazonManager m -> 
+                m.List() 
+                |> List.map (fun item -> AmazonInstance(item)) 
+            | SLManager m -> 
+                m.List() 
+                |> List.map (fun item -> SLInstance(item))
+
+    let createInstances(manager, n, instanceTemplate) = 
+        match manager, instanceTemplate with 
+            | AmazonManager m, AmazonIns ins -> 
+                let newInstances = m.Create(n, ins)
+                newInstances
+                |> List.map (fun item -> AmazonInstance item)
+            | SLManager m, SLIns ins -> 
+                let newInstances = m.Create(n, ins)
+                newInstances 
+                |> List.map (fun item -> SLInstance item)
+            | _ -> 
+                failwithf <| "Not valid"
+
+    let deleteInstace(manager, instanceId) =
         match manager with
-        | AmazonManager m -> 
-            let result = m.Delete(id)
-            Success
-        | SLManager m -> 
-            let result = m.Delete(id)
-            Success
+            | AmazonManager m -> 
+                let result = m.Delete(instanceId)
+                Success
+            | SLManager m -> 
+                let result = m.Delete(instanceId)
+                Success

@@ -1,0 +1,23 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 11.00
+# Visual Studio 2010
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mono.Options", "Mono.Options.csproj", "{222B7F16-DF97-43D7-885B-0EFCCAC79911}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+		ServerDebug|x86 = ServerDebug|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{222B7F16-DF97-43D7-885B-0EFCCAC79911}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{222B7F16-DF97-43D7-885B-0EFCCAC79911}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{222B7F16-DF97-43D7-885B-0EFCCAC79911}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{222B7F16-DF97-43D7-885B-0EFCCAC79911}.Release|Any CPU.Build.0 = Release|Any CPU
+		{222B7F16-DF97-43D7-885B-0EFCCAC79911}.ServerDebug|x86.ActiveCfg = ServerDebug|x86
+		{222B7F16-DF97-43D7-885B-0EFCCAC79911}.ServerDebug|x86.Build.0 = ServerDebug|x86
+	EndGlobalSection
+	GlobalSection(MonoDevelopProperties) = preSolution
+		StartupItem = Mono.Options.csproj
+	EndGlobalSection
+EndGlobal

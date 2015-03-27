@@ -2,21 +2,38 @@
 namespace InstanceManager.Softlayer
 
 open System
+open System.IO
 
 open FSharp.Data
 open FSharp.Data.JsonExtensions
 open RestSharp
 
-type Processor =
+type InstanceFeature =
     {
+        value       : int
         description : string
-        hourlyFee : decimal
+        hourlyFee   : decimal
+        recurringFee: decimal
+
+    }
+
+type OperatingSystem =
+    {
+        code        : string
+        description : string
+    }
+
+type Datacenter = 
+    { 
+        name : string 
     }
 
 type SoftlayerOptions =
     {
-        processors: list<Processor>
-        memory: list<Processor>
+        processors          : list<InstanceFeature>
+        memory              : list<InstanceFeature>
+        datacenters         : list<Datacenter>
+        operatingSystems    : list<OperatingSystem>
     }
 
 type SoftlayerInstance = 
@@ -33,23 +50,20 @@ type SoftlayerInstance =
         privateIp       : string
 
         createDate      : DateTime
-        modifyDate      : DateTime
-        provisionDate   : DateTime
+        modifyDate      : Option<DateTime>
+        provisionDate   : Option<DateTime>
 
         status          : string
-
     }
-
-type Datacenter = { name : string }
 
 type VmParams = 
     {
+        startCpus           : int
+        maxMemory           : int
+
         hostname            : string
         domain              : string
         datacenter          : Datacenter
-
-        maxMemory           : int
-        startCpus           : int
 
         hourlyBillingFlag   : bool
         localDiskFlag       : bool
@@ -57,12 +71,16 @@ type VmParams =
         operatingSystemReferenceCode : string
     }
 
-type CreationParams = { parameters : List<VmParams> }
+type CreationParams = { parameters : list<list<VmParams>> }
 
 type SoftlayerManager() = 
 
-    let username        = ""
-    let apikey          = ""
+    let path = Path.Combine [| Environment.GetEnvironmentVariable "HOME"; ".softlayer" ; "credentials.json" |]
+    do if not (File.Exists path) then failwith ("Expected credentials file at: " + path)
+
+    let credentials = JsonValue.Load path
+    let username = (credentials?username).AsString()
+    let apiKey = (credentials?apiKey).AsString()
 
     let baseUrl         = "https://api.softlayer.com/rest/v3/"
     let format          = "json"
@@ -71,7 +89,7 @@ type SoftlayerManager() =
     let vmService       = "SoftLayer_Virtual_Guest/"
 
     let client          = RestClient(baseUrl)
-    let authenticator   = HttpBasicAuthenticator(username,apikey)
+    let authenticator   = HttpBasicAuthenticator(username,apiKey)
 
     do client.Authenticator <- authenticator
 
@@ -80,8 +98,8 @@ type SoftlayerManager() =
         let response = client.Execute(req)
         let json = 
             match response.Content with
-                | "true" -> JsonValue.Boolean(true)
-                | _ -> JsonValue.Parse response.Content
+            | "true" -> JsonValue.Boolean(true)
+            | _ -> JsonValue.Parse response.Content
         json
 
     member this.Options() = 
@@ -91,19 +109,40 @@ type SoftlayerManager() =
             List.ofSeq(json?processors.AsArray()) 
             |> List.map (fun item -> 
                 {
+                    value = item?template?startCpus.AsInteger()
                     description = item?itemPrice?item?description.AsString()
                     hourlyFee = item?itemPrice?hourlyRecurringFee.AsDecimal()
+                    recurringFee = item?itemPrice?recurringFee.AsDecimal()
                 })
         let memoryOptions = 
             List.ofSeq(json?memory.AsArray()) 
             |> List.map (fun item -> 
                 {
+                    value = item?template?maxMemory.AsInteger()
                     description = item?itemPrice?item?description.AsString()
                     hourlyFee = item?itemPrice?hourlyRecurringFee.AsDecimal()
+                    recurringFee = item?itemPrice?recurringFee.AsDecimal()
+                })
+
+        let operatingSystems = 
+            List.ofSeq(json?operatingSystems.AsArray()) 
+            |> List.map (fun item -> 
+                {
+                    description = item?itemPrice?item?description.AsString()
+                    code = item?template?operatingSystemReferenceCode.AsString()
+                })
+
+        let datacenters = 
+            List.ofSeq(json?datacenters.AsArray()) 
+            |> List.map (fun item -> 
+                {
+                    name = item?template?datacenter?name.AsString()
                 })
         {
-            processors = processors
-            memory = memoryOptions
+            processors          = processors
+            memory              = memoryOptions
+            operatingSystems    = operatingSystems
+            datacenters         = datacenters
         }
 
     member this.List() =
@@ -122,48 +161,58 @@ type SoftlayerManager() =
                 publicIp    = (vm?primaryIpAddress.AsString())
                 privateIp   = (vm?primaryBackendIpAddress.AsString())
                 createDate  = (vm?createDate.AsDateTime())
-                modifyDate  = (vm?modifyDate.AsDateTime())
-                provisionDate = (vm?createDate.AsDateTime())
+                modifyDate  = Some (vm?modifyDate.AsDateTime())
+                provisionDate = Some (vm?createDate.AsDateTime())
                 status      = (vm?status?name.AsString())
             })
 
-    member this.Create(numberOfInstances:int, instance:VmParams) = 
+    member this.Create(numberOfInstances, instance) = 
 
-        let req = RestRequest("SoftLayer_Virtual_Guest.json", Method.POST)
-        let vm = { 
-                startCpus = instance.startCpus
-                maxMemory = instance.maxMemory
-                hostname = instance.hostname
-                domain = instance.domain
-                datacenter = { name = instance.datacenter.name }
-                hourlyBillingFlag = instance.hourlyBillingFlag
-                localDiskFlag = instance.localDiskFlag
-                operatingSystemReferenceCode = instance.operatingSystemReferenceCode
-            }
-        let vmList = [1 .. numberOfInstances] |> List.map (fun item -> vm)
-        let reqParams = { parameters = vmList }
+        let req = RestRequest(vmService + "createObjects.json?objectMask=primaryIpAddress", Method.POST)
+        let vmList = 
+            [1 .. numberOfInstances] 
+            |> List.map (fun i ->
+                let hostname = 
+                    if numberOfInstances > 1 then 
+                        instance.hostname + (sprintf "%04d" (i-1)) else 
+                        instance.hostname
+                { 
+                    startCpus = instance.startCpus
+                    maxMemory = instance.maxMemory
+                    hostname = hostname
+                    domain = instance.domain
+                    datacenter = { name = instance.datacenter.name }
+                    hourlyBillingFlag = instance.hourlyBillingFlag
+                    localDiskFlag = instance.localDiskFlag
+                    operatingSystemReferenceCode = instance.operatingSystemReferenceCode
+                })
+
+        let reqParams = { parameters = [vmList] }
 
         let json = this.DoRequest <| req.AddJsonBody(reqParams)
-        {
-            id      = (json?id.AsInteger())
-            cpus    = (json?startCpus.AsInteger())
-            memory  = (json?maxMemory.AsInteger())
+        let instances = Seq.toList <| json.AsArray()
+        instances 
+        |> List.map (fun ins -> 
+            {
+                id      = (ins?id.AsInteger())
+                cpus    = (ins?startCpus.AsInteger())
+                memory  = (ins?maxMemory.AsInteger())
 
-            hostname    = (json?hostname.AsString())
-            domain      = (json?domain.AsString())
-            fullHostname = (json?fullyQualifiedDomainName.AsString())
+                hostname    = (ins?hostname.AsString())
+                domain      = (ins?domain.AsString())
+                fullHostname = (ins?fullyQualifiedDomainName.AsString())
 
-            publicIp = ""
-            privateIp = ""
+                publicIp = ""
+                privateIp = ""
 
-            createDate = (json?createDate.AsDateTime())
-            modifyDate = (json?modifyDate.AsDateTime())
-            provisionDate = (json?provisionDate.AsDateTime())
+                createDate = (ins?createDate.AsDateTime())
+                modifyDate = None
+                provisionDate = None
 
-            status = ""
-        }
+                status = ""
+            })
 
-    member this.Delete(instanceId:string) = 
+    member this.Delete(instanceId) = 
         let req = RestRequest(vmService + instanceId.ToString() + ".json", Method.DELETE)
         let json = this.DoRequest req
         json
