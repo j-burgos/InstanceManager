@@ -72,8 +72,12 @@ type AwsManager() =
             instanceTypes = []
         }
 
-    member this.List() = 
-        let res = client.DescribeInstances()
+    member this.List(?instanceIds) = 
+        let req = DescribeInstancesRequest()
+        if instanceIds.IsSome then
+            req.InstanceIds <- instanceIds.Value
+
+        let res = client.DescribeInstances(req)
         let reservations = List.ofSeq res.Reservations
         let instances = seq {
           for reservation in reservations do

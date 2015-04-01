@@ -42,6 +42,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="AssemblyInfo.fs" />
+    <Compile Include="OptionParser.fs" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Program.fs">

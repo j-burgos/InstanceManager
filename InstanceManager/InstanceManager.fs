@@ -55,6 +55,14 @@ module InstanceManagement =
                 m.List() 
                 |> List.map (fun item -> SLInstance(item))
 
+    let getInstance(manager, instanceId) = 
+        match manager with
+            | AmazonManager m -> 
+                let ids = Collections.Generic.List<string>([instanceId])
+                AmazonInstance <| (m.List ids |> List.head)
+            | SLManager m -> 
+                SLInstance (m.GetInstance <| instanceId)
+
     let createInstances(manager, n, instanceTemplate) = 
         match manager, instanceTemplate with 
             | AmazonManager m, AmazonIns ins -> 
@@ -66,7 +74,7 @@ module InstanceManagement =
                 newInstances 
                 |> List.map (fun item -> SLInstance item)
             | _ -> 
-                failwithf <| "Not valid"
+                failwith <| "Not valid"
 
     let deleteInstace(manager, instanceId) =
         match manager with

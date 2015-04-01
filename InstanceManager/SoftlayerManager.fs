@@ -22,7 +22,12 @@ type OperatingSystem =
         code        : string
         description : string
     }
-
+type SshKey =
+    {
+        id : int
+        label: Option<string>
+        notes: Option<string>
+    }
 type Datacenter = 
     { 
         name : string 
@@ -67,6 +72,8 @@ type VmParams =
 
         hourlyBillingFlag   : bool
         localDiskFlag       : bool
+
+        sshKeys : Option<list<SshKey>>
 
         operatingSystemReferenceCode : string
     }
@@ -145,9 +152,31 @@ type SoftlayerManager() =
             datacenters         = datacenters
         }
 
+    member this.GetInstance(instanceId) = 
+        let req = RestRequest(vmService + instanceId.ToString() + ".json", Method.GET)
+        let ins = this.DoRequest <| req.AddQueryParameter("objectMask", "status;datacenter")
+        {
+                id      = (ins?id.AsInteger())
+                cpus    = (ins?startCpus.AsInteger())
+                memory  = (ins?maxMemory.AsInteger())
+
+                hostname    = (ins?hostname.AsString())
+                domain      = (ins?domain.AsString())
+                fullHostname = (ins?fullyQualifiedDomainName.AsString())
+
+                publicIp    = (ins?primaryIpAddress.AsString())
+                privateIp   = (ins?primaryBackendIpAddress.AsString())
+
+                createDate = (ins?createDate.AsDateTime())
+                modifyDate = Some (ins?modifyDate.AsDateTime())
+                provisionDate = Some (ins?createDate.AsDateTime())
+
+                status = (ins?status?name.AsString())
+            }
+
     member this.List() =
-        let req = RestRequest(accountService + "getVirtualGuests.json", Method.GET)
-        let json = this.DoRequest req
+        let req = RestRequest(accountService + "getVirtualGuests.json",Method.GET)
+        let json = this.DoRequest <| req.AddQueryParameter("objectMask", "status;datacenter")
         let jsonVms = json.AsArray()
         let list = List.ofArray(jsonVms)
         list |> List.map ( fun vm -> 
@@ -168,7 +197,7 @@ type SoftlayerManager() =
 
     member this.Create(numberOfInstances, instance) = 
 
-        let req = RestRequest(vmService + "createObjects.json?objectMask=primaryIpAddress", Method.POST)
+        let req = RestRequest(vmService + "createObjects.json", Method.POST)
         let vmList = 
             [1 .. numberOfInstances] 
             |> List.map (fun i ->
@@ -185,6 +214,7 @@ type SoftlayerManager() =
                     hourlyBillingFlag = instance.hourlyBillingFlag
                     localDiskFlag = instance.localDiskFlag
                     operatingSystemReferenceCode = instance.operatingSystemReferenceCode
+                    sshKeys = instance.sshKeys
                 })
 
         let reqParams = { parameters = [vmList] }

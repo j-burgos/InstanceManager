@@ -10,6 +10,19 @@ open InstanceManager.Aws
 open InstanceManager.Softlayer
 
 open InstanceManagement
+open ManagementApp
+open ManagementApp.OptionParser
+
+
+let create(manager, n, template) =
+    match template with
+        | SLIns i ->
+            createInstances(manager, n, SLIns i)
+        | AmazonIns i ->
+            createInstances(manager, n, AmazonIns i)
+
+let delete(manager, id) =
+    deleteInstace(manager, id)
 
 let printOptions options = 
     match options with 
@@ -40,9 +53,9 @@ let printOptions options =
                 printfn " %s - %s" img.imageId img.imageName
             printfn ""
 
-let printInstances instances = 
-    for instance in instances do
-        match instance with
+
+let printInstance instance =
+    match instance with
         | SLInstance ins -> 
             printfn "[%s] %s" ins.fullHostname ins.status
             printfn " Id: %d" ins.id
@@ -58,49 +71,77 @@ let printInstances instances =
             printfn " KeyName: %s" ai.keyName
             printfn ""
 
+let printInstances instances =
+    let l = Seq.length instances
+    if l = 0 then 
+        printfn "No available instances"
+    else
+        for instance in instances do
+            printInstance instance
+
 [<EntryPoint>]
 let main argv =
 
-    //let optionSet = OptionParser
-    let aws = getManager(Backend.Aws)
-    let sl = getManager(Backend.Softlayer)
+    try
 
-    let slOpts = getOptions sl
-    let awsOpts = getOptions aws
-    //printOptions slOpts
-    //printOptions awsOpts
+        let cmdOptions = OptionParser.parse argv
 
+        let manager = 
+            match cmdOptions.Backend with
+            | Backend.Aws -> 
+                getManager Backend.Aws
+            | Backend.Softlayer -> 
+                getManager Backend.Softlayer
 
-    let slVm = 
-        {
-            startCpus = 1
-            maxMemory = 1024
-            hostname = "vmprovisiontest"
-            domain = "beyondgames.io"
-            datacenter = { name = "dal05" }
-            hourlyBillingFlag = true
-            localDiskFlag = true
-            operatingSystemReferenceCode = "DEBIAN_LATEST"
-        }
-    let awsVm = 
-        {
-            imageId = "ami-8efdc7cb"
-            keyName = "rafael-beyond"
-            instanceType = "t1.micro"
-        }
+        match cmdOptions.Action with
+            | Action.ListOptions -> 
+                let options = getOptions manager
+                printOptions options
 
+            | Action.ListInstances -> 
+                let instances = getInstances manager
+                printInstances instances
+            
+            | Action.Instance ->
+                let instanceId = cmdOptions.Id
+                let instance = getInstance(manager, instanceId)
+                printfn "Instance: %A" instance
 
-    //let slCreate = createInstances(sl, 1, SLIns(slVm))
-    //let awsCreate = createInstances(aws, 2, AmazonIns(awsVm))
+            | Action.Create ->
+                let instance = 
+                    match cmdOptions.Backend with
+                    | Backend.Softlayer ->
+                        SLIns {
+                            startCpus = cmdOptions.Cpus
+                            maxMemory = cmdOptions.Memory
+                            hostname = cmdOptions.Hostname
+                            domain = cmdOptions.Domain
+                            datacenter = { name = cmdOptions.Datacenter }
+                            hourlyBillingFlag = cmdOptions.HourlyBilling
+                            localDiskFlag = cmdOptions.LocalDisk
+                            operatingSystemReferenceCode = cmdOptions.OperatingSystem
+                            sshKeys = None
+                        }
+                    | Backend.Aws ->
+                        AmazonIns {
+                            imageId = cmdOptions.ImageId
+                            keyName = cmdOptions.KeyName
+                            instanceType = cmdOptions.InstanceType
+                        }
 
-    //Thread.Sleep 5000
+                let instances = create(manager, cmdOptions.Quantity, instance)
+                printInstances instances
 
-    let slInstances = getInstances sl
-    let awsInstances = getInstances aws
-    printInstances slInstances 
-    printInstances awsInstances 
-    //let slRes = createInstances(sl, 1, SLIns(slVm))
+            | Action.Delete -> 
+                let instanceId = cmdOptions.Id
+                printfn "Deleting instance %s ..." instanceId
+                delete(manager, instanceId) |> ignore
+            | _ -> 
+                printfn ""
+        0
 
-
-
-    0 // return an integer exit code
+    with
+        | _ as ex ->
+            printfn "%s" ex.Message
+            failwithf "%s" ex.Message
+            -1
