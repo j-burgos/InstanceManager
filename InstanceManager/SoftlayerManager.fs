@@ -24,9 +24,9 @@ type OperatingSystem =
     }
 type SshKey =
     {
-        id : int
-        label: Option<string>
-        notes: Option<string>
+        id : string
+        label : string
+        notes : string
     }
 type Datacenter = 
     { 
@@ -61,6 +61,10 @@ type SoftlayerInstance =
         status          : string
     }
 
+type Id ={
+    id : string
+}
+
 type VmParams = 
     {
         startCpus           : int
@@ -73,7 +77,7 @@ type VmParams =
         hourlyBillingFlag   : bool
         localDiskFlag       : bool
 
-        sshKeys : Option<list<SshKey>>
+        sshKeys             : Id list
 
         operatingSystemReferenceCode : string
     }
@@ -108,6 +112,17 @@ type SoftlayerManager() =
             | "true" -> JsonValue.Boolean(true)
             | _ -> JsonValue.Parse response.Content
         json
+
+    member this.Keys() = 
+        let req = RestRequest(accountService + "getSshKeys.json", Method.GET)
+        let json = this.DoRequest req
+        let keys = List.ofSeq(json.AsArray()) 
+        keys |> List.map (fun item -> 
+            {
+                id = item?id.AsString()
+                label = item?label.AsString()
+                notes = if item.TryGetProperty("notes") = None then "" else item?notes.AsString()
+            })
 
     member this.Options() = 
         let req = RestRequest(vmService + "getCreateObjectOptions.json", Method.GET)
@@ -164,12 +179,12 @@ type SoftlayerManager() =
                 domain      = (ins?domain.AsString())
                 fullHostname = (ins?fullyQualifiedDomainName.AsString())
 
-                publicIp    = (ins?primaryIpAddress.AsString())
-                privateIp   = (ins?primaryBackendIpAddress.AsString())
+                publicIp    = if ins.TryGetProperty("primaryIpAddress") = None then "" else (ins?primaryIpAddress.AsString())
+                privateIp   = if ins.TryGetProperty("primaryBackendIpAddress") = None then "" else (ins?primaryBackendIpAddress.AsString())
 
-                createDate = (ins?createDate.AsDateTime())
-                modifyDate = Some (ins?modifyDate.AsDateTime())
-                provisionDate = Some (ins?createDate.AsDateTime())
+                createDate = DateTime()//if ins.TryGetProperty("createDate") = None then DateTime() else (ins?createDate.AsDateTime())
+                modifyDate = Some(DateTime()) //if ins.TryGetProperty("modifyDate") = None then None else Some (ins?modifyDate.AsDateTime())
+                provisionDate = Some(DateTime())//if ins.TryGetProperty("provisionDate") = None then None else Some (ins?provisionDate.AsDateTime())
 
                 status = (ins?status?name.AsString())
             }

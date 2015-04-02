@@ -9,6 +9,10 @@ type Backend =
     | Aws
     | Softlayer
 
+type Keys =
+    | AmazonKeys of string list
+    | SLKeys of SshKey list
+
 type Manager = 
     | AmazonManager of AwsManager
     | SLManager of SoftlayerManager
@@ -45,6 +49,13 @@ module InstanceManagement =
                 AmazonOptions <| m.Options()
             | SLManager m -> 
                 SLOptions <| m.Options()
+
+    let getKeys(manager) =
+        match manager with
+            | AmazonManager m -> 
+                AmazonKeys <| []
+            | SLManager m -> 
+                SLKeys <| m.Keys()
 
     let getInstances(manager) = 
         match manager with

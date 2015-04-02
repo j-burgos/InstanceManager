@@ -52,7 +52,30 @@ let printOptions options =
             for img in opts.images do
                 printfn " %s - %s" img.imageId img.imageName
             printfn ""
+let printKeys keys =
+    match keys with 
+        | SLKeys k ->
+            for key in k do
+                printfn "[%s] Id: %s" key.label key.id
+                printfn "Notes: %s" key.notes
+        | AmazonKeys k ->
+            for key in k do
+                printfn "%A" key
 
+let printInstanceId instance =
+    match instance with
+        | SLInstance ins -> printfn "%d" ins.id
+        | AmazonInstance ins -> printfn "%s" ins.id
+
+let printInstanceIp instance =
+    match instance with
+        | SLInstance ins -> 
+            if ins.publicIp = "" then
+                failwith "Public Ip not available"
+            else
+                printfn "%s" ins.publicIp
+        | AmazonInstance ins -> 
+            printfn "%s" ins.publicIpAddress
 
 let printInstance instance =
     match instance with
@@ -101,11 +124,15 @@ let main argv =
             | Action.ListInstances -> 
                 let instances = getInstances manager
                 printInstances instances
-            
+
+            | Action.ListKeys ->
+                let keys = getKeys(manager)
+                printKeys keys
+
             | Action.Instance ->
                 let instanceId = cmdOptions.Id
                 let instance = getInstance(manager, instanceId)
-                printfn "Instance: %A" instance
+                printInstanceIp instance
 
             | Action.Create ->
                 let instance = 
@@ -120,7 +147,7 @@ let main argv =
                             hourlyBillingFlag = cmdOptions.HourlyBilling
                             localDiskFlag = cmdOptions.LocalDisk
                             operatingSystemReferenceCode = cmdOptions.OperatingSystem
-                            sshKeys = None
+                            sshKeys = [{ id = cmdOptions.SshKey }]
                         }
                     | Backend.Aws ->
                         AmazonIns {
@@ -128,9 +155,12 @@ let main argv =
                             keyName = cmdOptions.KeyName
                             instanceType = cmdOptions.InstanceType
                         }
-
                 let instances = create(manager, cmdOptions.Quantity, instance)
-                printInstances instances
+                if cmdOptions.Quantity = 1 then
+                    let instance = List.head <| instances
+                    printInstanceId instance
+                else 
+                    printInstances instances
 
             | Action.Delete -> 
                 let instanceId = cmdOptions.Id
@@ -142,6 +172,6 @@ let main argv =
 
     with
         | _ as ex ->
-            printfn "%s" ex.Message
-            failwithf "%s" ex.Message
-            -1
+            (*printfn "%s" ex.Message*)
+            printfn "Failed: %s" ex.Message
+            1

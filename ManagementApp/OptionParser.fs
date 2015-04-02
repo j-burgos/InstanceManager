@@ -9,6 +9,7 @@ open InstanceManager
 
 type Action =
     | ListOptions
+    | ListKeys
     | ListInstances
     | Instance
     | Create
@@ -31,6 +32,7 @@ type CmdOptions = {
     HourlyBilling   : bool
     LocalDisk       : bool
     OperatingSystem : string
+    SshKey          : string
 
     ImageId         : string
     InstanceType    : string
@@ -61,6 +63,7 @@ let parse args =
         InstanceType    = ""
         KeyName         = ""
         Region          = ""
+        SshKey          = "194151"
     }
 
     let optionSet = OptionSet()
@@ -91,6 +94,12 @@ let parse args =
     addOption "l|list|list-instances" "Lists the available instances"
         (fun _ ->
             cmdOptions := { !cmdOptions with Action = Action.ListInstances }
+        )
+
+
+    addOption "keys" "Show instance properties. Requires an instance id"
+        (fun _ ->
+            cmdOptions := { !cmdOptions with Action = Action.ListKeys }
         )
 
     addOption "instance" "Show instance properties. Requires an instance id"
@@ -172,6 +181,11 @@ let parse args =
     addOption "key-name:" "KeyName used to create the instance. Used for Amazon backend" 
         (fun keyname ->
             cmdOptions := { !cmdOptions with KeyName = keyname } 
+        )
+
+    addOption "ssh-key:" "Key label to provision root user in Softlayer" 
+        (fun key ->
+            cmdOptions := { !cmdOptions with SshKey = key } 
         )
 
     addOption "region:" "Region to create the instance in. Used for Amazon backend" 
