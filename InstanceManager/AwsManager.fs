@@ -19,8 +19,9 @@ type AwsImage =
 
 type AwsOptions = 
     {
-        images          : list<AwsImage>
-        instanceTypes   : list<string>
+        images          : AwsImage list
+        instanceTypes   : string list
+        keyNames        : string list
     }
 
 type AwsInstance = 
@@ -44,6 +45,7 @@ type AwsVmParams =
         imageId         : string
         keyName         : string
         instanceType    : string
+        hostname        : string
     }
 
 type AwsManager() = 
@@ -57,8 +59,13 @@ type AwsManager() =
     let client = AWSClientFactory.CreateAmazonEC2Client(awsKeyId,awsSecretKey, RegionEndpoint.USWest1) 
 
     member this.Options() = 
+
+        let insTypes = EC2.InstanceType("").GetType().GetFields()
+
         let req = DescribeImagesRequest()
-        req.Owners <- List<string>(["self"])
+        //let filters = List<string>(["available"])
+        req.Owners <- List<string>(["self"; "amazon"; "aws-marketplace"])
+        //req.Filters <- List<Filter>([Filter("state",filters); Filter("platform")])
         let res = client.DescribeImages req
         let images = 
             List.ofSeq res.Images 
@@ -67,9 +74,28 @@ type AwsManager() =
                     imageId = item.ImageId 
                     imageName = item.Name
                 })
+        let kpairs = client.DescribeKeyPairs()
+        let keyPairs = 
+            List.ofSeq kpairs.KeyPairs
+            |> List.map (fun item ->
+                item.KeyName
+                )
+        let iTypes = 
+            List.ofSeq insTypes 
+            |> List.map (fun item ->
+                let tName = item.Name.ToLower()
+                let index = tName.LastIndexOfAny([|'1'; '2'; '3'; '4'; '8'|])
+               
+                match index with
+                | index when index >= 2 ->
+                    tName.Insert(index, ".")
+                | _ ->
+                    tName.Insert(index + 1, ".")
+            )
         {
             images = images
-            instanceTypes = []
+            instanceTypes = iTypes
+            keyNames = keyPairs
         }
 
     member this.List(?instanceIds) = 
@@ -95,7 +121,7 @@ type AwsManager() =
                       privateDnsName = instance.PrivateDnsName
                       privateIpAddress = instance.PrivateIpAddress
                       publicDnsName = instance.PublicDnsName
-                      publicIpAddress = instance.PublicIpAddress
+                      publicIpAddress = if instance.PublicIpAddress = null then "" else instance.PublicIpAddress
                       status = instance.State.Name.Value
                   }
         }
@@ -106,12 +132,32 @@ type AwsManager() =
         let req = RunInstancesRequest(instance.imageId,instanceNumber,instanceNumber)
         req.InstanceType <- EC2.InstanceType(instance.instanceType)
         req.KeyName <- instance.keyName
+        req.SecurityGroupIds.Add("sg-d0c824b5")
         let res = client.RunInstances(req)
         let instances = Seq.toList <| res.Reservation.Instances
+
+        let tagReq = CreateTagsRequest()
+        if instances.Length > 1 then
+            for index = 0 to instances.Length - 1 do
+                tagReq.Resources.Clear()
+                tagReq.Resources.Add(instances.[index].InstanceId)
+                tagReq.Tags.Clear()
+                tagReq.Tags.Add(Tag("Name", (sprintf "%s%04d" instance.hostname index) ))
+                client.CreateTags(tagReq) |> ignore
+        else
+            let tag = Tag("Name", instance.hostname)
+            tagReq.Resources.Add(instances.Head.InstanceId)
+            tagReq.Tags.Add(tag)
+            client.CreateTags(tagReq) |> ignore
+
         instances |> List.map (fun ins ->
+
+            let nameTag = ins.Tags.Find(fun item -> item.Key = "Name")
+            let name = if nameTag = null then "" else nameTag.Value
+
             {
                 id = ins.InstanceId
-                name = ""
+                name = name
                 imageId = ins.ImageId
                 instanceType = ins.InstanceType.Value
                 architecture = ins.Architecture.Value

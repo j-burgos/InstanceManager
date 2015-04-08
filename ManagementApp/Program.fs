@@ -1,15 +1,13 @@
 ﻿
 open System
-open System.Threading
 
 open Mono.Options
 
 open InstanceManager
-
 open InstanceManager.Aws
 open InstanceManager.Softlayer
-
 open InstanceManagement
+
 open ManagementApp
 open ManagementApp.OptionParser
 
@@ -47,11 +45,27 @@ let printOptions options =
                 printfn " %s" dc.name
             printfn ""
 
+            printfn "= SSH Keys ="
+            for key in opts.sshKeys do
+                printfn " %s - %s" key.label key.notes
+            printfn ""
+
         | AmazonOptions opts ->
             printfn "= Images ="
             for img in opts.images do
                 printfn " %s - %s" img.imageId img.imageName
             printfn ""
+
+            printfn "= Key names ="
+            for kn in opts.keyNames do
+                printfn " %s" kn
+            printfn ""
+
+            printfn "= Instance types ="
+            for it in opts.instanceTypes do
+                printfn " %s" it
+            printfn ""
+
 let printKeys keys =
     match keys with 
         | SLKeys k ->
@@ -75,7 +89,10 @@ let printInstanceIp instance =
             else
                 printfn "%s" ins.publicIp
         | AmazonInstance ins -> 
-            printfn "%s" ins.publicIpAddress
+            if ins.publicIpAddress = "" then
+                failwith "Public Ip not available"
+            else
+                printfn "%s" ins.publicIpAddress
 
 let printInstance instance =
     match instance with
@@ -92,6 +109,9 @@ let printInstance instance =
             printfn " Created at: %A" ai.launchTime
             printfn " Type: %s" ai.instanceType
             printfn " KeyName: %s" ai.keyName
+            printfn " Public IP: %s - Private IP: %s" ai.publicIpAddress ai.privateIpAddress
+            printfn " Public hostname: %s" ai.publicDnsName
+            printfn " Private hostname: %s" ai.privateDnsName
             printfn ""
 
 let printInstances instances =
@@ -125,10 +145,6 @@ let main argv =
                 let instances = getInstances manager
                 printInstances instances
 
-            | Action.ListKeys ->
-                let keys = getKeys(manager)
-                printKeys keys
-
             | Action.Instance ->
                 let instanceId = cmdOptions.Id
                 let instance = getInstance(manager, instanceId)
@@ -147,12 +163,13 @@ let main argv =
                             hourlyBillingFlag = cmdOptions.HourlyBilling
                             localDiskFlag = cmdOptions.LocalDisk
                             operatingSystemReferenceCode = cmdOptions.OperatingSystem
-                            sshKeys = [{ id = cmdOptions.SshKey }]
+                            sshKeys = [{ id = cmdOptions.Key }]
                         }
                     | Backend.Aws ->
                         AmazonIns {
                             imageId = cmdOptions.ImageId
-                            keyName = cmdOptions.KeyName
+                            keyName = cmdOptions.Key
+                            hostname = cmdOptions.Hostname
                             instanceType = cmdOptions.InstanceType
                         }
                 let instances = create(manager, cmdOptions.Quantity, instance)

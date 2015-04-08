@@ -35,10 +35,11 @@ type Datacenter =
 
 type SoftlayerOptions =
     {
-        processors          : list<InstanceFeature>
-        memory              : list<InstanceFeature>
-        datacenters         : list<Datacenter>
-        operatingSystems    : list<OperatingSystem>
+        processors          : InstanceFeature list
+        memory              : InstanceFeature list
+        datacenters         : Datacenter list
+        operatingSystems    : OperatingSystem list
+        sshKeys             : SshKey list
     }
 
 type SoftlayerInstance = 
@@ -55,8 +56,8 @@ type SoftlayerInstance =
         privateIp       : string
 
         createDate      : DateTime
-        modifyDate      : Option<DateTime>
-        provisionDate   : Option<DateTime>
+        modifyDate      : DateTime option
+        provisionDate   : DateTime option
 
         status          : string
     }
@@ -82,7 +83,7 @@ type VmParams =
         operatingSystemReferenceCode : string
     }
 
-type CreationParams = { parameters : list<list<VmParams>> }
+type CreationParams = { parameters : VmParams list list }
 
 type SoftlayerManager() = 
 
@@ -160,11 +161,14 @@ type SoftlayerManager() =
                 {
                     name = item?template?datacenter?name.AsString()
                 })
+
+        let keys = this.Keys()
         {
             processors          = processors
             memory              = memoryOptions
             operatingSystems    = operatingSystems
             datacenters         = datacenters
+            sshKeys             = keys
         }
 
     member this.GetInstance(instanceId) = 
@@ -211,7 +215,11 @@ type SoftlayerManager() =
             })
 
     member this.Create(numberOfInstances, instance) = 
-
+        let keys = this.Keys()
+        let key = 
+            keys
+            |> List.filter (fun item -> item.label = instance.sshKeys.Head.id)
+            |> List.head 
         let req = RestRequest(vmService + "createObjects.json", Method.POST)
         let vmList = 
             [1 .. numberOfInstances] 
@@ -229,7 +237,7 @@ type SoftlayerManager() =
                     hourlyBillingFlag = instance.hourlyBillingFlag
                     localDiskFlag = instance.localDiskFlag
                     operatingSystemReferenceCode = instance.operatingSystemReferenceCode
-                    sshKeys = instance.sshKeys
+                    sshKeys = [{ id = key.id }]
                 })
 
         let reqParams = { parameters = [vmList] }

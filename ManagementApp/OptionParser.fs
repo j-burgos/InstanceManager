@@ -23,6 +23,7 @@ type CmdOptions = {
 
     Id              : string
     Quantity        : int
+    Key             : string
 
     Memory          : int 
     Cpus            : int 
@@ -32,11 +33,9 @@ type CmdOptions = {
     HourlyBilling   : bool
     LocalDisk       : bool
     OperatingSystem : string
-    SshKey          : string
 
     ImageId         : string
     InstanceType    : string
-    KeyName         : string
     Region          : string
 }
 
@@ -49,6 +48,7 @@ let parse args =
 
         Id              = ""
         Quantity        = 0
+        Key             = ""
 
         Memory          = 0
         Cpus            = 0
@@ -61,9 +61,7 @@ let parse args =
 
         ImageId         = ""
         InstanceType    = ""
-        KeyName         = ""
         Region          = ""
-        SshKey          = "194151"
     }
 
     let optionSet = OptionSet()
@@ -94,12 +92,6 @@ let parse args =
     addOption "l|list|list-instances" "Lists the available instances"
         (fun _ ->
             cmdOptions := { !cmdOptions with Action = Action.ListInstances }
-        )
-
-
-    addOption "keys" "Show instance properties. Requires an instance id"
-        (fun _ ->
-            cmdOptions := { !cmdOptions with Action = Action.ListKeys }
         )
 
     addOption "instance" "Show instance properties. Requires an instance id"
@@ -178,14 +170,9 @@ let parse args =
             cmdOptions := { !cmdOptions with InstanceType = insType } 
         )
 
-    addOption "key-name:" "KeyName used to create the instance. Used for Amazon backend" 
-        (fun keyname ->
-            cmdOptions := { !cmdOptions with KeyName = keyname } 
-        )
-
-    addOption "ssh-key:" "Key label to provision root user in Softlayer" 
+    addOption "key:" "Key label to provision root user" 
         (fun key ->
-            cmdOptions := { !cmdOptions with SshKey = key } 
+            cmdOptions := { !cmdOptions with Key = key } 
         )
 
     addOption "region:" "Region to create the instance in. Used for Amazon backend" 
@@ -198,7 +185,7 @@ let parse args =
     )
      
     try
-        optionSet.Parse(args) |> ignore 
+        optionSet.Parse(args) |> ignore
     with
         | :? OptionException as ex ->
             failwithf "Option error: %s" ex.Message
